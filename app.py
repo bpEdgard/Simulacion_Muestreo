@@ -206,7 +206,7 @@ PLOTLY_LAYOUT = dict(
 )
 AXIS_STYLE = dict(gridcolor=C["grid"], zerolinecolor=C["grid"])
 
-tab1, tab2 = st.tabs(["📈 Dominio del tiempo", "📊 Espectro de frecuencia"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Dominio del tiempo", "📊 Espectro de frecuencia", "🔬 Interpolación sinc", "🔁 Espectro replicado", "🎛️ Señal reconstruida"])
 
 # ─── Tab 1: Tiempo ────────────────────────────────────────────────────────────
 with tab1:
@@ -256,7 +256,7 @@ with tab1:
     )
     fig.update_xaxes(title_text="Tiempo (ms)", **AXIS_STYLE)
     fig.update_yaxes(title_text="Amplitud", **AXIS_STYLE)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", key="chart_tab1")
 
 # ─── Tab 2: Espectro ──────────────────────────────────────────────────────────
 with tab2:
@@ -304,7 +304,7 @@ with tab2:
     )
     fig2.update_xaxes(title_text="Frecuencia (Hz)", range=[0, max_freq], **AXIS_STYLE)
     fig2.update_yaxes(title_text="Amplitud normalizada", range=[0, 1.15], **AXIS_STYLE)
-    st.plotly_chart(fig2, width="stretch")
+    st.plotly_chart(fig2, width="stretch", key="chart_tab2")
 
     # Tabla de componentes
     st.markdown("**Componentes espectrales:**")
@@ -317,6 +317,309 @@ with tab2:
             "Estado": "⚠️ Aliasing" if aliased else "✅ OK",
         })
     st.dataframe(rows, width="stretch", hide_index=True)
+
+# ─── Tab 3: Interpolación sinc ────────────────────────────────────────────────
+with tab3:
+    fig3 = go.Figure()
+
+    MAX_SINCS = 30
+    samples_to_plot = list(zip(t_samp, y_samp))[:MAX_SINCS]
+
+    for ti, yi in samples_to_plot:
+        x = fs * (t_cont - ti)
+        sinc_i = np.where(np.abs(x) < 1e-9, 1.0, np.sin(np.pi * x) / (np.pi * x))
+        sinc_scaled = yi * sinc_i
+
+        fig3.add_trace(go.Scatter(
+            x=t_cont * 1000, y=sinc_scaled,
+            mode="lines",
+            line=dict(color="#22d3ee", width=1, dash="dot"),
+            opacity=0.35,
+            showlegend=False,
+        ))
+
+    if y_rec is not None:
+        fig3.add_trace(go.Scatter(
+            x=t_cont * 1000, y=y_rec,
+            name="Reconstruida (suma sinc)",
+            line=dict(color="#a78bfa", width=2.5),
+        ))
+
+    fig3.add_trace(go.Scatter(
+        x=t_samp * 1000, y=y_samp,
+        name="Muestras",
+        mode="markers",
+        marker=dict(color=C["sampled"], size=8),
+    ))
+
+    fig3.update_layout(
+        **PLOTLY_LAYOUT,
+        title=dict(text="Reconstrucción sinc — suma de funciones interpolantes", font=dict(size=14)),
+        height=380,
+    )
+    fig3.update_xaxes(title_text="Tiempo (ms)", **AXIS_STYLE)
+    fig3.update_yaxes(title_text="Amplitud", **AXIS_STYLE)
+
+    if len(t_samp) > MAX_SINCS:
+        st.caption(f"⚠️ Se muestran las primeras {MAX_SINCS} sincs de {len(t_samp)} muestras para no saturar el gráfico.")
+
+    st.plotly_chart(fig3, width="stretch", key="chart_sinc")
+
+# ─── Tab 4: Espectro replicado ────────────────────────────────────────────────
+with tab4:
+    nyquist_freq = fs / 2
+    max_disp = 2.5 * fs
+
+    fig4 = go.Figure()
+
+    # Bandas de fondo alternadas: base (cyan), espejo (rojo), réplica, ...
+    zone_bounds = [0, nyquist_freq, fs, 1.5 * fs, 2 * fs, 2.5 * fs]
+    zone_colors = [
+        "rgba(34,211,238,0.08)",
+        "rgba(239,68,68,0.07)",
+        "rgba(34,211,238,0.04)",
+        "rgba(239,68,68,0.04)",
+        "rgba(34,211,238,0.02)",
+    ]
+    zone_names = ["Banda base", "Zona espejo", "Réplica 1", "Zona espejo", "Réplica 2"]
+    for i in range(len(zone_colors)):
+        lo = zone_bounds[i]
+        hi = min(zone_bounds[i + 1], max_disp)
+        fig4.add_vrect(x0=lo, x1=hi, fillcolor=zone_colors[i], line_width=0, layer="below")
+        fig4.add_annotation(
+            x=(lo + hi) / 2, y=1.20,
+            text=zone_names[i],
+            showarrow=False,
+            font=dict(size=9, color="#64748b"),
+            xref="x", yref="y",
+        )
+
+    # Líneas verticales en múltiplos de fs/2
+    k = 1
+    while k * nyquist_freq <= max_disp:
+        x = k * nyquist_freq
+        label = {1: f"fs/2={nyquist_freq:.0f}Hz", 2: f"fs={fs:.0f}Hz"}.get(k, f"{k}·fs/2" if k % 2 else f"{k//2}·fs")
+        fig4.add_vline(
+            x=x,
+            line_dash="dash",
+            line_color="#ef4444" if k == 1 else "#334155",
+            line_width=1.5 if k == 1 else 0.8,
+            annotation_text=label,
+            annotation_font_color="#ef4444" if k == 1 else "#475569",
+            annotation_font_size=9,
+            annotation_position="top left",
+        )
+        k += 1
+
+    # Réplicas espectrales
+    # Para una señal real con componente en f_orig, las copias en frecuencias positivas son:
+    #   f_orig + k*fs  (copia directa)
+    #   k*fs - f_orig  (copia espejo de la frecuencia negativa)
+    already_labeled = {}
+    legend_names = {
+        "alias":   "⚠ Alias en banda base",
+        "original": "Original (banda base)",
+        "replica":  "Réplica (fuera de banda base)",
+    }
+
+    for orig_f, amp in components:
+        copies = set()
+        for k in range(-2, 5):
+            for c in [orig_f + k * fs, k * fs - orig_f]:
+                if 1e-3 < c <= max_disp + 1e-3:
+                    copies.add(round(c, 4))
+        copies = sorted(copies)
+
+        for copy_f in copies:
+            in_baseband = copy_f <= nyquist_freq + 1e-4
+            is_original = (orig_f <= nyquist_freq) and (abs(copy_f - orig_f) < 0.1)
+            is_alias = in_baseband and not is_original
+
+            if is_alias:
+                color, kind = "#ef4444", "alias"
+            elif is_original:
+                color, kind = C["signal"], "original"
+            else:
+                color, kind = "#475569", "replica"
+
+            show_leg = kind not in already_labeled
+            already_labeled[kind] = True
+
+            hover = (
+                f"f = {copy_f:.1f} Hz<br>Amp = {amp:.3f}<br>"
+                + (f"⚠ Alias de {orig_f:.1f} Hz" if is_alias
+                   else "Original" if is_original
+                   else f"Réplica de {orig_f:.1f} Hz")
+                + "<extra></extra>"
+            )
+
+            fig4.add_trace(go.Scatter(
+                x=[copy_f, copy_f], y=[0, amp],
+                mode="lines",
+                line=dict(color=color, width=3),
+                name=legend_names[kind] if show_leg else "",
+                showlegend=show_leg,
+                hovertemplate=hover,
+            ))
+            fig4.add_trace(go.Scatter(
+                x=[copy_f], y=[amp],
+                mode="markers",
+                marker=dict(color=color, size=9),
+                showlegend=False,
+            ))
+
+            # Flecha desde el componente fuera de banda hacia su alias en banda base
+            if is_alias and orig_f > nyquist_freq and orig_f <= max_disp:
+                fig4.add_annotation(
+                    ax=orig_f, ay=amp + 0.12,
+                    x=copy_f,  y=amp + 0.12,
+                    xref="x", yref="y",
+                    axref="x", ayref="y",
+                    text="",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1.2,
+                    arrowwidth=1.5,
+                    arrowcolor="#ef4444",
+                )
+
+    fig4.update_layout(
+        **PLOTLY_LAYOUT,
+        title=dict(text="Espectro replicado del muestreo — réplicas periódicas en múltiplos de fs", font=dict(size=14)),
+        height=440,
+        showlegend=True,
+    )
+    fig4.update_xaxes(title_text="Frecuencia (Hz)", range=[0, max_disp], **AXIS_STYLE)
+    fig4.update_yaxes(title_text="Amplitud normalizada", range=[0, 1.3], **AXIS_STYLE)
+    st.plotly_chart(fig4, width="stretch", key="chart_tab4")
+
+    st.markdown("""
+    <div style="font-family:'Courier New',monospace; font-size:12px; color:#64748b;
+                line-height:1.8; padding:12px; background:#111827;
+                border:1px solid #1e293b; border-radius:8px;">
+    <b style="color:#e2e8f0">¿Qué muestra este gráfico?</b><br>
+    Al muestrear a fs, el espectro de la señal discreta es la suma infinita de
+    <b style="color:#22d3ee">réplicas periódicas</b> del espectro original,
+    desplazadas en múltiplos de fs (y sus espejos).<br>
+    Cuando fs &lt; 2·BW, alguna réplica <b style="color:#ef4444">cae dentro de la
+    banda base [0, fs/2]</b>: el filtro reconstructor no puede distinguirla de una
+    componente legítima → <b style="color:#ef4444">aliasing</b>.<br>
+    Las flechas rojas muestran qué componente fuera de banda genera cada alias.
+    Es un fenómeno <b style="color:#e2e8f0">lineal</b> (no intermodulación no lineal):
+    pura superposición de espectros solapados.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Tabla de aliases
+    alias_rows = []
+    for orig_f, amp in components:
+        if orig_f > nyquist_freq:
+            f_red = orig_f % fs
+            f_alias = fs - f_red if f_red > nyquist_freq else f_red
+            clash = next((f"{f:.1f}" for f, _ in components if abs(f - f_alias) < 0.5 and f <= nyquist_freq), "—")
+            alias_rows.append({
+                "Componente original (Hz)": f"{orig_f:.1f}",
+                "Alias en banda base (Hz)": f"{f_alias:.1f}",
+                "Amplitud": f"{amp:.4f}",
+                "Interfiere con (Hz)": clash,
+            })
+    if alias_rows:
+        st.markdown("**Tabla de aliases:**")
+        st.dataframe(alias_rows, width="stretch", hide_index=True)
+
+# ─── Tab 5: Señal reconstruida analítica ──────────────────────────────────────
+with tab5:
+    nyquist_freq = fs / 2
+
+    # Para cada componente, calcular la frecuencia efectiva en [0, fs/2] y el signo.
+    # Cuando f mod fs > fs/2, el alias tiene signo negativo (reflexión espectral).
+    # Esto es consistente con la reconstrucción sinc.
+    baseband_components = {}   # f_eff -> amplitud acumulada (con signo)
+    comp_detail = []           # para la tabla explicativa
+
+    for orig_f, amp in components:
+        f_red = orig_f % fs
+        if f_red <= nyquist_freq:
+            f_eff, sign = f_red, +1.0
+            es_alias = (orig_f > nyquist_freq)   # componente que "se copió" sin doblar
+        else:
+            f_eff, sign = fs - f_red, -1.0
+            es_alias = True
+
+        baseband_components[f_eff] = baseband_components.get(f_eff, 0.0) + sign * amp
+        comp_detail.append({
+            "f original (Hz)": f"{orig_f:.1f}",
+            "f en banda base (Hz)": f"{f_eff:.1f}",
+            "Amplitud efectiva": f"{sign * amp:+.4f}",
+            "Tipo": "⚠ Alias" if es_alias else "✅ Original",
+        })
+
+    # Señal filtrada ideal: solo componentes originales que ya estaban en [0, fs/2]
+    y_filtered = np.zeros_like(t_cont)
+    for orig_f, amp in components:
+        if orig_f <= nyquist_freq:
+            y_filtered += amp * np.sin(2 * np.pi * orig_f * t_cont)
+
+    # Señal reconstruida con aliases: suma de todas las componentes en banda base
+    y_reconstructed = np.zeros_like(t_cont)
+    for f_eff, a_eff in baseband_components.items():
+        y_reconstructed += a_eff * np.sin(2 * np.pi * f_eff * t_cont)
+
+    # Distorsión pura generada por el aliasing
+    y_distortion = y_reconstructed - y_filtered
+
+    fig5 = go.Figure()
+
+    fig5.add_trace(go.Scatter(
+        x=t_cont * 1000, y=y_cont,
+        name="Señal original (completa)",
+        line=dict(color=C["signal"], width=2),
+    ))
+    fig5.add_trace(go.Scatter(
+        x=t_cont * 1000, y=y_filtered,
+        name="Filtrada ideal (solo f ≤ fs/2)",
+        line=dict(color="#10b981", width=2, dash="dash"),
+    ))
+    fig5.add_trace(go.Scatter(
+        x=t_cont * 1000, y=y_reconstructed,
+        name="Reconstruida (con aliases)",
+        line=dict(color=C["rec"], width=2.5),
+    ))
+    fig5.add_trace(go.Scatter(
+        x=t_cont * 1000, y=y_distortion,
+        name="Distorsión por aliasing",
+        line=dict(color=C["alias"], width=1.5, dash="dot"),
+        visible="legendonly",
+    ))
+
+    fig5.update_layout(
+        **PLOTLY_LAYOUT,
+        title=dict(text="Señal reconstruida — componentes en banda base incluyendo aliases", font=dict(size=14)),
+        height=400,
+    )
+    fig5.update_xaxes(title_text="Tiempo (ms)", **AXIS_STYLE)
+    fig5.update_yaxes(title_text="Amplitud", **AXIS_STYLE)
+    st.plotly_chart(fig5, width="stretch", key="chart_tab5")
+
+    st.markdown("""
+    <div style="font-family:'Courier New',monospace; font-size:12px; color:#64748b;
+                line-height:1.8; padding:12px; background:#111827;
+                border:1px solid #1e293b; border-radius:8px;">
+    <b style="color:#e2e8f0">¿Cómo se construye la señal reconstruida?</b><br>
+    El filtro pasabajos del reconstructor toma <b style="color:#e2e8f0">todo</b> lo que cae en
+    [0, fs/2] y lo trata como frecuencia legítima.<br>
+    • Las componentes originales que ya estaban en banda base pasan sin cambio
+    (<b style="color:#10b981">verde</b>).<br>
+    • Los aliases entran a la banda base con <b style="color:#ef4444">signo invertido</b>
+    cuando se doblan alrededor de fs/2 (reflexión espectral).<br>
+    • La suma de ambas forma la señal reconstruida (<b style="color:#a78bfa">violeta</b>):
+    diferente a la original cuando hay aliasing.<br>
+    • Activar "Distorsión" en la leyenda muestra únicamente la componente espuria agregada.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("**Componentes en banda base usadas para la reconstrucción:**")
+    st.dataframe(comp_detail, width="stretch", hide_index=True)
 
 # ─── Actividades sugeridas ────────────────────────────────────────────────────
 st.divider()
