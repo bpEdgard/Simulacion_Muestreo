@@ -136,6 +136,7 @@ def nyquist_badge(fs, bw):
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.image("FaIn UNCo fondo transparente.png", use_container_width=True)
     st.markdown("## ⚙️ Parámetros")
 
     signal_name = st.selectbox("Tipo de señal", list(SIGNALS.keys()))
@@ -505,8 +506,7 @@ with tab4:
     banda base [0, fs/2]</b>: el filtro reconstructor no puede distinguirla de una
     componente legítima → <b style="color:#ef4444">aliasing</b>.<br>
     Las flechas rojas muestran qué componente fuera de banda genera cada alias.
-    Es un fenómeno <b style="color:#e2e8f0">lineal</b> (no intermodulación no lineal):
-    pura superposición de espectros solapados.
+    Es un fenómeno <b style="color:#e2e8f0">lineal</b> de superposición de espectros solapados.
     </div>
     """, unsafe_allow_html=True)
 
@@ -610,7 +610,7 @@ with tab5:
     [0, fs/2] y lo trata como frecuencia legítima.<br>
     • Las componentes originales que ya estaban en banda base pasan sin cambio
     (<b style="color:#10b981">verde</b>).<br>
-    • Los aliases entran a la banda base con <b style="color:#ef4444">signo invertido</b>
+    • Los alias entran a la banda base con <b style="color:#ef4444">signo invertido</b>
     cuando se doblan alrededor de fs/2 (reflexión espectral).<br>
     • La suma de ambas forma la señal reconstruida (<b style="color:#a78bfa">violeta</b>):
     diferente a la original cuando hay aliasing.<br>
@@ -622,20 +622,20 @@ with tab5:
     st.dataframe(comp_detail, width="stretch", hide_index=True)
 
 # ─── Actividades sugeridas ────────────────────────────────────────────────────
-st.divider()
-with st.expander("🧪 Actividades sugeridas para la clase", expanded=False):
-    st.markdown("""
-    <div class="activities-box">
-    <b style="color:#22d3ee">1.</b> Con señal senoidal de 10 Hz, encontrá la fs mínima para evitar aliasing. ¿Qué pasa con fs = 19 Hz?<br><br>
-    <b style="color:#22d3ee">2.</b> Comparar señal cuadrada vs senoidal a 10 Hz. ¿Por qué la cuadrada necesita mayor fs?<br><br>
-    <b style="color:#22d3ee">3.</b> Con señal multitono, hallá fs tal que solo la componente de 4f tenga aliasing.<br><br>
-    <b style="color:#22d3ee">4.</b> Activá la reconstrucción y observá cómo se degrada al bajar fs por debajo de Nyquist.<br><br>
-    <b style="color:#22d3ee">5.</b> Para cada tipo de señal, determiná el ancho de banda y verificá el criterio de Nyquist.
-    </div>
-    """, unsafe_allow_html=True)
-
+#st.divider()
+#with st.expander("🧪 Actividades sugeridas para la clase", expanded=False):
+#    st.markdown("""
+#    <div class="activities-box">
+#    <b style="color:#22d3ee">1.</b> Con señal senoidal de 10 Hz, encontrá la fs mínima para evitar aliasing. ¿Qué pasa con fs = 19 Hz?<br><br>
+#    <b style="color:#22d3ee">2.</b> Comparar señal cuadrada vs senoidal a 10 Hz. ¿Por qué la cuadrada necesita mayor fs?<br><br>
+#    <b style="color:#22d3ee">3.</b> Con señal multitono, hallá fs tal que solo la componente de 4f tenga aliasing.<br><br>
+#    <b style="color:#22d3ee">4.</b> Activá la reconstrucción y observá cómo se degrada al bajar fs por debajo de Nyquist.<br><br>
+#    <b style="color:#22d3ee">5.</b> Para cada tipo de señal, determiná el ancho de banda y verificá el criterio de Nyquist.
+#    </div>
+#    """, unsafe_allow_html=True)
+#
 st.markdown(
     "<p style='text-align:center; color:#334155; font-size:11px; font-family:monospace; margin-top:8px'>"
-    "Ingeniería Electrónica · Sistemas de Comunicaciones & Control</p>",
+    "Ingeniería Electrónica · Sistemas de Comunicaciones I</p>",
     unsafe_allow_html=True,
 )
