@@ -2,6 +2,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
+from definiciones import DARK, LIGHT
 
 # ─── Configuración de página ───────────────────────────────────────────────────
 st.set_page_config(
@@ -11,20 +12,25 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Estilo ───────────────────────────────────────────────────────────────────
+# ─── Tema: inicializar antes de cualquier widget ──────────────────────────────
+if "tema_claro" not in st.session_state:
+    st.session_state.tema_claro = False
+
+C = LIGHT if st.session_state.tema_claro else DARK
+
+PLOTLY_LAYOUT = dict(
+    paper_bgcolor=C["paper"],
+    plot_bgcolor=C["bg"],
+    font=dict(color=C["font"], family="Courier New, monospace"),
+    margin=dict(l=50, r=20, t=40, b=40),
+    hovermode="x unified",
+    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=C["legend_border"]),
+)
+AXIS_STYLE = dict(gridcolor=C["grid"], zerolinecolor=C["grid"])
+
+# ─── Estilo (solo badges: colores semánticos, válidos en ambos temas) ─────────
 st.markdown("""
 <style>
-    .main { background-color: #0a0e17; }
-    .stApp { background-color: #0a0e17; color: #e2e8f0; }
-    div[data-testid="stSidebar"] { background-color: #111827; }
-    .metric-card {
-        background: #111827;
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        padding: 12px 16px;
-        text-align: center;
-        font-family: 'Courier New', monospace;
-    }
     .badge-ok {
         background: #10b98118;
         border: 1px solid #10b98144;
@@ -48,15 +54,6 @@ st.markdown("""
         padding: 10px 14px;
         color: #ef4444;
         font-family: 'Courier New', monospace;
-    }
-    .activities-box {
-        background: #111827;
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        padding: 16px;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        color: #94a3b8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -136,7 +133,7 @@ def nyquist_badge(fs, bw):
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.image("FaIn UNCo fondo transparente.png", use_container_width=True)
+    st.image("FaIn UNCo Logo 2.png", width='stretch')
     st.markdown("## ⚙️ Parámetros")
 
     signal_name = st.selectbox("Tipo de señal", list(SIGNALS.keys()))
@@ -148,6 +145,7 @@ with st.sidebar:
     f0 = st.slider("Frecuencia de señal  f₀ (Hz)", 1, 100, 10, 1)
     fs = st.slider("Frecuencia de muestreo  fs (Hz)", 2, 500, 25, 1)
     show_rec = st.toggle("Mostrar reconstrucción sinc", value=True)
+    st.toggle("☀️ Tema claro", key="tema_claro")
     st.divider()
 
     bw = sig["bandwidth"](f0)
@@ -155,23 +153,22 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"""
-    <div style="font-family:'Courier New',monospace; font-size:12px; color:#64748b; line-height:1.8">
-    <b style="color:#e2e8f0">📐 Parámetros</b><br>
-    Ancho de banda: <span style="color:#22d3ee">{bw:.0f} Hz</span><br>
-    Nyquist mínimo: <span style="color:#ef4444">fs ≥ {2*bw:.0f} Hz</span><br>
-    Frec. de muestreo: <span style="color:#f59e0b">{fs} Hz</span><br>
-    Muestras/período: <span style="color:#e2e8f0">{fs/f0:.1f}</span>
+    <div style="font-family:'Courier New',monospace; font-size:12px; color:{C["zone_label"]}; line-height:1.8">
+    <b style="color:{C["font"]}">📐 Parámetros</b><br>
+    Ancho de banda: <span style="color:{C["signal"]}">{bw:.0f} Hz</span><br>
+    Nyquist mínimo: <span style="color:{C["nyquist"]}">fs ≥ {2*bw:.0f} Hz</span><br>
+    Frec. de muestreo: <span style="color:{C["sampled"]}">{fs} Hz</span><br>
+    Muestras/período: <span style="color:{C["font"]}">{fs/f0:.1f}</span>
     </div>
     """, unsafe_allow_html=True)
 
 # ─── Cuerpo principal ─────────────────────────────────────────────────────────
 st.markdown(
-    "<h1 style='text-align:center; font-family:sans-serif; "
-    "background:linear-gradient(135deg,#22d3ee,#a78bfa); "
-    "-webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:2px'>"
-    "Simulador de Muestreo</h1>"
-    "<p style='text-align:center; color:#64748b; font-family:monospace; font-size:13px; margin-top:0'>"
-    "Teorema de Nyquist-Shannon · Aliasing · Reconstrucción</p>",
+    f"<h1 style='text-align:center; font-family:sans-serif; "
+    f"color:{C['signal']}; margin-bottom:2px'>"
+    f"Simulador de Muestreo</h1>"
+    f"<p style='text-align:center; color:{C['zone_label']}; font-family:monospace; font-size:13px; margin-top:0'>"
+    f"Teorema de Nyquist-Shannon · Aliasing · Reconstrucción</p>",
     unsafe_allow_html=True,
 )
 
@@ -185,27 +182,6 @@ y_cont = sig["fn"](t_cont, f0)
 y_samp = sig["fn"](t_samp, f0)
 y_rec = sinc_reconstruct(t_samp, y_samp, fs, t_cont) if show_rec else None
 
-# ─── Paleta ───────────────────────────────────────────────────────────────────
-C = {
-    "bg": "#0a0e17",
-    "grid": "#1e2d4a",
-    "signal": "#22d3ee",
-    "sampled": "#f59e0b",
-    "rec": "#a78bfa",
-    "alias": "#ef4444",
-    "nyquist": "#ef4444",
-    "paper": "#0f172a",
-}
-
-PLOTLY_LAYOUT = dict(
-    paper_bgcolor=C["paper"],
-    plot_bgcolor=C["bg"],
-    font=dict(color="#e2e8f0", family="Courier New, monospace"),
-    margin=dict(l=50, r=20, t=40, b=40),
-    hovermode="x unified",
-    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor="#1e293b"),
-)
-AXIS_STYLE = dict(gridcolor=C["grid"], zerolinecolor=C["grid"])
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Dominio del tiempo", "📊 Espectro de frecuencia", "🔬 Interpolación sinc", "🔁 Espectro replicado", "🎛️ Señal reconstruida"])
 
@@ -328,13 +304,14 @@ with tab3:
 
     for ti, yi in samples_to_plot:
         x = fs * (t_cont - ti)
-        sinc_i = np.where(np.abs(x) < 1e-9, 1.0, np.sin(np.pi * x) / (np.pi * x))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            sinc_i = np.where(np.abs(x) < 1e-9, 1.0, np.sin(np.pi * x) / (np.pi * x))
         sinc_scaled = yi * sinc_i
 
         fig3.add_trace(go.Scatter(
             x=t_cont * 1000, y=sinc_scaled,
             mode="lines",
-            line=dict(color="#22d3ee", width=1, dash="dot"),
+            line=dict(color=C["signal"], width=1, dash="dot"),
             opacity=0.35,
             showlegend=False,
         ))
@@ -343,7 +320,7 @@ with tab3:
         fig3.add_trace(go.Scatter(
             x=t_cont * 1000, y=y_rec,
             name="Reconstruida (suma sinc)",
-            line=dict(color="#a78bfa", width=2.5),
+            line=dict(color=C["rec"], width=2.5),
         ))
 
     fig3.add_trace(go.Scatter(
@@ -376,11 +353,11 @@ with tab4:
     # Bandas de fondo alternadas: base (cyan), espejo (rojo), réplica, ...
     zone_bounds = [0, nyquist_freq, fs, 1.5 * fs, 2 * fs, 2.5 * fs]
     zone_colors = [
-        "rgba(34,211,238,0.08)",
-        "rgba(239,68,68,0.07)",
-        "rgba(34,211,238,0.04)",
-        "rgba(239,68,68,0.04)",
-        "rgba(34,211,238,0.02)",
+        C["zone_base"],
+        C["zone_mirror"],
+        C["zone_rep1"],
+        C["zone_rep2"],
+        C["zone_rep3"],
     ]
     zone_names = ["Banda base", "Zona espejo", "Réplica 1", "Zona espejo", "Réplica 2"]
     for i in range(len(zone_colors)):
@@ -391,7 +368,7 @@ with tab4:
             x=(lo + hi) / 2, y=1.20,
             text=zone_names[i],
             showarrow=False,
-            font=dict(size=9, color="#64748b"),
+            font=dict(size=9, color=C["zone_label"]),
             xref="x", yref="y",
         )
 
@@ -403,10 +380,10 @@ with tab4:
         fig4.add_vline(
             x=x,
             line_dash="dash",
-            line_color="#ef4444" if k == 1 else "#334155",
+            line_color=C["nyquist"] if k == 1 else C["vline_mid"],
             line_width=1.5 if k == 1 else 0.8,
             annotation_text=label,
-            annotation_font_color="#ef4444" if k == 1 else "#475569",
+            annotation_font_color=C["nyquist"] if k == 1 else C["ann_mid"],
             annotation_font_size=9,
             annotation_position="top left",
         )
@@ -441,7 +418,7 @@ with tab4:
             elif is_original:
                 color, kind = C["signal"], "original"
             else:
-                color, kind = "#475569", "replica"
+                color, kind = C["replica"], "replica"
 
             show_leg = kind not in already_labeled
             already_labeled[kind] = True
@@ -578,7 +555,7 @@ with tab5:
     fig5.add_trace(go.Scatter(
         x=t_cont * 1000, y=y_filtered,
         name="Filtrada ideal (solo f ≤ fs/2)",
-        line=dict(color="#10b981", width=2, dash="dash"),
+        line=dict(color=C["filtered"], width=2, dash="dash"),
     ))
     fig5.add_trace(go.Scatter(
         x=t_cont * 1000, y=y_reconstructed,
